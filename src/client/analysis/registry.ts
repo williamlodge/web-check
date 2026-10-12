@@ -1,26 +1,30 @@
 import type { JobsState } from 'client/jobs/types';
 import { allCards } from 'client/jobs/registry';
+import type { CheckId } from '@/data/checks';
 import type { Analyzer, Finding } from './types';
 
 import httpSecurity from './rules/http-security';
+import mixedContent from './rules/mixed-content';
 import hsts from './rules/hsts';
 import ssl from './rules/ssl';
 import dnssec from './rules/dnssec';
+import caaRecords from './rules/caa-records';
 import securityTxt from './rules/security-txt';
 import threats from './rules/threats';
+import breaches from './rules/breaches';
 import blockLists from './rules/block-lists';
 import firewall from './rules/firewall';
 import cookies from './rules/cookies';
+import trackers from './rules/trackers';
 import headers from './rules/headers';
 import ports from './rules/ports';
 import mailConfig from './rules/mail-config';
-import txtRecords from './rules/txt-records';
 import tlsConnection from './rules/tls-connection';
 import tlsSecurityAudit from './rules/tls-security-audit';
 import quality from './rules/quality';
 import socialTags from './rules/social-tags';
 import socialPresence from './rules/social-presence';
-import whois from './rules/whois';
+import domainInfo from './rules/domain-info';
 import status from './rules/status';
 import redirects from './rules/redirects';
 import serverInfo from './rules/server-info';
@@ -28,26 +32,29 @@ import robotsTxt from './rules/robots-txt';
 import tlsClientCompat from './rules/tls-client-compat';
 
 /* Map of card id to its pure analyzer */
-export const analyzers: Record<string, Analyzer> = {
+export const analyzers: Partial<Record<CheckId, Analyzer>> = {
   'http-security': httpSecurity,
+  'mixed-content': mixedContent,
   hsts,
   ssl,
   dnssec,
+  'caa-records': caaRecords,
   'security-txt': securityTxt,
   threats,
+  breaches,
   'block-lists': blockLists,
   firewall,
   cookies,
+  trackers,
   headers,
   ports,
   'mail-config': mailConfig,
-  'txt-records': txtRecords,
   'tls-connection': tlsConnection,
   'tls-security-audit': tlsSecurityAudit,
   quality,
   'social-tags': socialTags,
   'social-presence': socialPresence,
-  whois,
+  'domain-info': domainInfo,
   status,
   redirects,
   'server-info': serverInfo,

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
@@ -29,7 +30,7 @@ if (trustProxy) {
   app.set('trust proxy', parsed);
 }
 
-const __filename = new URL(import.meta.url).pathname;
+const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const port = process.env.PORT || 3000; // The port to run the server on
@@ -37,6 +38,7 @@ const API_DIR = '/api'; // Name of the dir containing the lambda functions
 const dirPath = path.join(__dirname, API_DIR); // Path to the lambda functions dir
 const guiPath = path.join(__dirname, 'dist', 'client');
 const placeholderFilePath = path.join(__dirname, 'public', 'placeholder.html');
+let notFoundFilePath = path.join(__dirname, 'public', 'error.html');
 const handlers = {}; // Will store list of API endpoints
 const { version } = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf-8'));
 const apiFiles = fs
@@ -100,7 +102,7 @@ apiFiles.forEach(async (dirent) => {
   const routeName = dirent.name.split('.')[0];
   const route = `${API_DIR}/${routeName}`;
 
-  const handlerModule = await import(path.join(dirPath, dirent.name));
+  const handlerModule = await import(pathToFileURL(path.join(dirPath, dirent.name)).href);
   const handler = handlerModule.default || handlerModule;
   handlers[route] = handler;
 
@@ -207,8 +209,10 @@ if (process.env.DISABLE_GUI && process.env.DISABLE_GUI !== 'false') {
   });
 } else {
   // GUI enabled, and build files present, let's go!!
+  notFoundFilePath = path.join(guiPath, '404.html');
   app.use(express.static('dist/client/'));
   app.use(async (req, res, next) => {
+    if (req.path.startsWith(`${API_DIR}/`)) return next();
     const ssrHandlerPath = path.join(__dirname, 'dist', 'server', 'entry.mjs');
     import(ssrHandlerPath)
       .then(({ handler: ssrHandler }) => {
@@ -223,7 +227,7 @@ if (process.env.DISABLE_GUI && process.env.DISABLE_GUI !== 'false') {
 // Anything left unhandled (which isn't an API endpoint), return a 404
 app.use((req, res, next) => {
   if (!req.path.startsWith(`${API_DIR}/`)) {
-    res.status(404).sendFile(path.join(__dirname, 'public', 'error.html'));
+    res.status(404).sendFile(notFoundFilePath);
   } else {
     next();
   }

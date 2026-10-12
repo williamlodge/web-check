@@ -8,12 +8,16 @@ import colors from 'client/styles/colors';
 export const StyledCard = styled.section<{ styles?: string }>`
   background: ${colors.backgroundLighter};
   color: ${colors.textColor};
-  box-shadow: 4px 4px 0px ${colors.bgShadowColor};
-  border-radius: 8px;
+  border: 1px solid ${colors.primaryTransparent};
+  border-radius: 4px;
   padding: 1rem;
   position: relative;
   max-height: 54rem;
   overflow: auto;
+  overflow-wrap: anywhere;
+  h4 {
+    margin: 1rem 0 0.5rem 0;
+  }
   ${(props) => props.styles}
 `;
 

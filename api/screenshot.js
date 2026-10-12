@@ -1,13 +1,16 @@
-import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
 import { randomUUID } from 'crypto';
 import { execFile } from 'child_process';
 import { promises as fs } from 'fs';
 import path from 'path';
 import middleware from './_common/middleware.js';
 import { createLogger } from './_common/logger.js';
+import { UA } from './_common/http.js';
+import { launchBrowser, openPage, closeBrowser, isBrowserMissing } from './_common/browser.js';
 
 const log = createLogger('screenshot');
+
+// How long to wait for Chromium before killing it, in milliseconds
+const SCREENSHOT_TIMEOUT = parseInt(process.env.PUBLIC_API_TIMEOUT_LIMIT || '40000', 10);
 
 // Screenshot via the system Chromium binary
 const directChromiumScreenshot = async (url) => {
@@ -15,45 +18,39 @@ const directChromiumScreenshot = async (url) => {
   const screenshotPath = path.join(tmpDir, `screenshot-${randomUUID()}.png`);
   log.debug(`direct method, saving to ${screenshotPath}`);
 
-  return new Promise((resolve, reject) => {
-    const chromePath = process.env.CHROME_PATH || '/usr/bin/chromium';
-    const args = [
-      '--headless',
-      '--disable-gpu',
-      '--no-sandbox',
-      // Headless picks its own size otherwise, this keeps it matching the puppeteer fallback
-      '--window-size=800,600',
-      `--screenshot=${screenshotPath}`,
-      url,
-    ];
-    execFile(chromePath, args, async (error) => {
-      if (error) return reject(error);
-      try {
-        const buf = await fs.readFile(screenshotPath);
-        await fs
-          .unlink(screenshotPath)
-          .catch((err) => log.warn(`temp cleanup failed: ${err.message}`));
-        resolve(buf.toString('base64'));
-      } catch (readError) {
-        reject(readError);
-      }
+  const chromePath = process.env.CHROME_PATH || '/usr/bin/chromium';
+  const args = [
+    '--headless',
+    '--disable-gpu',
+    '--no-sandbox',
+    // Headless picks its own size otherwise, this keeps it matching the puppeteer fallback
+    '--window-size=800,600',
+    `--user-agent=${UA}`,
+    `--screenshot=${screenshotPath}`,
+    url,
+  ];
+
+  try {
+    await new Promise((resolve, reject) => {
+      execFile(chromePath, args, { timeout: SCREENSHOT_TIMEOUT }, (error) =>
+        error ? reject(error) : resolve(),
+      );
     });
-  });
+    return (await fs.readFile(screenshotPath)).toString('base64');
+  } finally {
+    // Always remove the temp file, including the partial one left by a killed Chromium
+    await fs.unlink(screenshotPath).catch((err) => {
+      if (err.code !== 'ENOENT') log.warn(`temp cleanup failed: ${err.message}`);
+    });
+  }
 };
 
 // Fallback to puppeteer when the direct Chromium binary call fails
 const puppeteerScreenshot = async (targetUrl) => {
   let browser = null;
   try {
-    browser = await puppeteer.launch({
-      args: [...chromium.args, '--no-sandbox'],
-      defaultViewport: { width: 800, height: 600 },
-      executablePath: process.env.CHROME_PATH || (await chromium.executablePath()),
-      headless: true,
-      acceptInsecureCerts: true,
-      ignoreDefaultArgs: ['--disable-extensions'],
-    });
-    const page = await browser.newPage();
+    browser = await launchBrowser({ defaultViewport: { width: 800, height: 600 } });
+    const page = await openPage(browser);
     await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
     page.setDefaultNavigationTimeout(8000);
     await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
@@ -65,7 +62,7 @@ const puppeteerScreenshot = async (targetUrl) => {
     const buffer = await page.screenshot();
     return buffer.toString('base64');
   } finally {
-    if (browser) await browser.close().catch(() => {});
+    if (browser) await closeBrowser(browser);
   }
 };
 
@@ -81,12 +78,14 @@ const screenshotHandler = async (targetUrl) => {
   try {
     return { image: await directChromiumScreenshot(targetUrl) };
   } catch (directError) {
+    // A timed-out Chromium means a slow page, so puppeteer would only time out too
+    if (directError.killed) throw new Error(`Screenshot timed-out after ${SCREENSHOT_TIMEOUT} ms`);
     log.warn(`direct chromium failed, falling back to puppeteer: ${directError.message}`);
   }
   try {
     return { image: await puppeteerScreenshot(targetUrl) };
   } catch (error) {
-    if (/ENOENT|Browser was not found|Could not find Chromium/i.test(error.message)) {
+    if (isBrowserMissing(error)) {
       return { skipped: error.message };
     }
     log.error(`puppeteer screenshot failed: ${error.message}`);

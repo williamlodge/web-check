@@ -31,19 +31,7 @@ const ServerLocationCard = (props: {
   actionButtons: any;
 }): JSX.Element => {
   const location = props.data;
-  const {
-    city,
-    region,
-    country,
-    postCode,
-    countryCode,
-    coords,
-    isp,
-    timezone,
-    languages,
-    currency,
-    currencyCode,
-  } = location;
+  const { city, region, country, postCode, countryCode, coords, isp, asn, timezone } = location;
 
   return (
     <Card heading={props.title} actionButtons={props.actionButtons} styles={cardStyles}>
@@ -60,10 +48,8 @@ const ServerLocationCard = (props: {
         </Row>
       )}
       {timezone && <Row lbl="Timezone" val={timezone} />}
-      {languages && <Row lbl="Languages" val={languages} />}
-      {currency && (
-        <Row lbl="Currency" val={currencyCode ? `${currency} (${currencyCode})` : currency} />
-      )}
+      {isp && <Row lbl="Network" val={isp} />}
+      {asn && <Row lbl="ASN" val={`AS${asn}`} link={`https://bgp.he.net/AS${asn}`} />}
       <MapRow>
         <LocationMap lat={coords.latitude} lon={coords.longitude} label={`Server (${isp})`} />
         <SmallText>
